@@ -7,8 +7,8 @@ from contextlib import redirect_stdout
 from graph import build_graph
 
 # ---------- 页面配置 ----------
-st.set_page_config(page_title="智能客服 MVP", page_icon="🤖")
-st.title("🤖 多 Agent 智能客服系统（简历 MVP）")
+st.set_page_config(page_title="智能客服", page_icon="🤖")
+st.title("🤖 多 Agent 智能客服系统")
 st.caption("基于 LangGraph + DeepSeek + Chroma 向量检索")
 
 # ---------- 初始化会话状态 ----------

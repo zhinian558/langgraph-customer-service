@@ -115,10 +115,10 @@ def router_node(state: AgentState) -> AgentState:
     response = llm_with_tools.invoke(messages)
 
     # 将 AIMessage 转换为可 JSON 序列化的字典
-    response_dict = response.model_dump()  # 或 response.dict()
-    print("📦 完整 LLM 响应：")
-    print(json.dumps(response_dict, indent=2, ensure_ascii=False, default=str))
-    
+    # response_dict = response.model_dump()  # 或 response.dict()
+    # print("📦 完整 LLM 响应：")
+    # print(json.dumps(response_dict, indent=2, ensure_ascii=False, default=str))
+
     if response.content:
         print(f"💭 思考：{response.content}")
 
