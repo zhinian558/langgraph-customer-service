@@ -117,13 +117,14 @@ def check_return_eligibility(order_id: str, reason: str = "七天无理由") -> 
     days_diff = (current_time - updated_at).days
 
     max_days = 7 if "无理由" in reason else 15
-    if days_diff > max_days:
+    elapsed = current_time - updated_at
+    if elapsed > timedelta(days=max_days):
         return json.dumps(
             {"eligible": False, "reason": f"已超过{max_days}天退货期限"},
             ensure_ascii=False
         )
 
     return json.dumps(
-        {"eligible": True, "reason": "符合退货条件", "max_days": max_days, "days_diff": days_diff},
+        {"eligible": True, "reason": "符合退货条件", "max_days": max_days, "days_diff": elapsed.days},
         ensure_ascii=False
     )

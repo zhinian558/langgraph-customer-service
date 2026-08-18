@@ -108,15 +108,29 @@ FINAL_RESPONSE_PROMPT = """你是客服代表，请根据对话历史生成简�
 - 如果信息不足或结果不确定，请礼貌地询问用户补充，或者告知已转人工处理。
 """
 
+MAX_SUPERVISOR_CALLS = 6   # 正常退货流程需调度 3-4 次，6 次留足余量
+
 # ---------- 状态定义 ----------
 class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
     next_agent: str
+    supervisor_calls: int   # 新增：Supervisor 调度次数计数
 
 # ---------- Supervisor 节点 ----------
 def supervisor_node(state: AgentState) -> AgentState:
     print("\n" + "=" * 60)
     print("【Supervisor 监督者】分析中...")
+
+    # 调度次数计数：超过上限强制进入最终回复，防止无限循环
+    calls = state.get("supervisor_calls", 0) + 1
+    if calls > MAX_SUPERVISOR_CALLS:
+        print(f"⚠️ 超过最大调度次数（{MAX_SUPERVISOR_CALLS}），强制进入最终回复")
+        return {
+            "messages": [],
+            "next_agent": "final_response",
+            "supervisor_calls": calls,
+        }
+    
     messages = list(state["messages"])
     if not any(isinstance(m, SystemMessage) for m in messages):
         messages = [SystemMessage(content=SUPERVISOR_PROMPT)] + messages
@@ -156,6 +170,7 @@ def supervisor_node(state: AgentState) -> AgentState:
     return {
         "messages": [response] + tool_messages,
         "next_agent": next_agent,
+        "supervisor_calls": calls,
     }
 
 # ---------- 订单 Agent 节点 ----------

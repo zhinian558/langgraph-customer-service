@@ -32,12 +32,13 @@ def get_vectorstore(embedding_model=None):
         )
     docs = load_knowledge_base()
     # 使用持久化目录
-    vectorstore = Chroma.from_documents(
-        documents=docs,
-        embedding=embedding_model,
+    vectorstore = Chroma(
+        embedding_function=embedding_model,
         collection_name="return_policy",
-        persist_directory="./chroma_db",  # 持久化
+        persist_directory="./chroma_db",
     )
+    if len(vectorstore.get()["ids"]) == 0:   # 非空则跳过插入
+        vectorstore.add_documents(documents=docs)
     return vectorstore, docs
 
 # ---------- 3. 全局初始化（模块加载时执行一次） ----------

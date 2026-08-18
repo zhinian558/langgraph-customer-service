@@ -2,14 +2,24 @@ import streamlit as st
 import sys
 import io
 import json
+import importlib
 from contextlib import redirect_stdout
-
 from graph import build_graph
+
 
 # ---------- 页面配置 ----------
 st.set_page_config(page_title="智能客服", page_icon="🤖")
 st.title("🤖 多 Agent 智能客服系统")
 st.caption("基于 LangGraph + DeepSeek + Chroma 向量检索")
+
+# ---------- 开发者工具：热更新 ----------
+with st.sidebar.expander("🛠️ 开发者工具", expanded=False):
+    if st.button("🔄 重新加载代码并重建图"):
+        import database, tools, rag, graph
+        for m in (database, tools, rag, graph):   # 顺序：依赖在前
+            importlib.reload(m)
+        st.session_state.graph = graph.build_graph()  # 注意用 graph. 前缀
+        st.rerun()
 
 # ---------- 初始化会话状态 ----------
 if "messages" not in st.session_state:
@@ -59,7 +69,7 @@ def run_graph_with_logs(langchain_messages):
 
     try:
         initial_state = {"messages": langchain_messages}
-        result = st.session_state.graph.invoke(initial_state)
+        result = st.session_state.graph.invoke(initial_state,config={"recursion_limit": 40})
         final_answer = result["messages"][-1].content
     except Exception as e:
         final_answer = f"系统错误：{str(e)}"
