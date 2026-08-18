@@ -1,0 +1,5 @@
+- Cumulative distribution function of the non-central F distribution.
+   ncfdtridfd   -- Calculate degrees of freedom (denominator) for the noncentral F-distribution.
+   ncfdtridfn   -- Calculate degrees of freedom (numerator) for the noncentral F-distribution.
+   ncfdtri      -- Inverse cumulative distribution function of the non-central F distribution.
+   ncfdtrinc    -- Calculate non-centrality

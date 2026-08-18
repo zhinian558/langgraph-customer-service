@@ -31,11 +31,12 @@ def get_vectorstore(embedding_model=None):
             model_name="BAAI/bge-small-zh-v1.5"
         )
     docs = load_knowledge_base()
+    # 使用持久化目录
     vectorstore = Chroma.from_documents(
         documents=docs,
         embedding=embedding_model,
         collection_name="return_policy",
-        persist_directory=None,  # 内存模式
+        persist_directory="./chroma_db",  # 持久化
     )
     return vectorstore, docs
 
