@@ -42,7 +42,9 @@ supervisor_llm = llm.bind_tools([route_to_agent],tool_choice={"type": "function"
 # ---------- 绑定各自工具的专职 Agent LLM ----------
 order_llm = llm.bind_tools([search_order],tool_choice={"type": "function", "function": {"name": "search_order"}})
 policy_llm = llm.bind_tools([retrieve_return_policy],tool_choice={"type": "function", "function": {"name": "retrieve_return_policy"}})
-return_llm = llm.bind_tools([check_return_eligibility, process_return],tool_choice={"type": "function", "function": {"name": "check_return_eligibility"}})  # 退货 Agent 绑定两个工具
+# 退货 Agent 绑定两个工具：第一轮强制调用资格检查，后续轮次由模型根据检查结果自由决策
+return_first_llm = llm.bind_tools([check_return_eligibility], tool_choice={"type": "function", "function": {"name": "check_return_eligibility"}})
+return_llm = llm.bind_tools([check_return_eligibility, process_return])
 
 # ---------- 系统提示词 ----------
 SUPERVISOR_PROMPT = """你是智能客服系统的监督者（Supervisor），负责调度专职 Agent 完成用户请求。
@@ -115,7 +117,7 @@ class AgentState(TypedDict):
 def supervisor_node(state: AgentState) -> AgentState:
     print("\n" + "=" * 60)
     print("【Supervisor 监督者】分析中...")
-    messages = state["messages"]
+    messages = list(state["messages"])
     if not any(isinstance(m, SystemMessage) for m in messages):
         messages = [SystemMessage(content=SUPERVISOR_PROMPT)] + messages
 
@@ -160,7 +162,7 @@ def supervisor_node(state: AgentState) -> AgentState:
 def order_agent_node(state: AgentState) -> AgentState:
     print("\n" + "=" * 60)
     print("【订单 Agent】执行中...")
-    messages = state["messages"]
+    messages = list(state["messages"])
     if not any(isinstance(m, SystemMessage) for m in messages):
         messages = [SystemMessage(content=ORDER_AGENT_PROMPT)] + messages
 
@@ -193,7 +195,7 @@ def order_agent_node(state: AgentState) -> AgentState:
 def policy_agent_node(state: AgentState) -> AgentState:
     print("\n" + "=" * 60)
     print("【政策 Agent】执行中...")
-    messages = state["messages"]
+    messages = list(state["messages"])
     if not any(isinstance(m, SystemMessage) for m in messages):
         messages = [SystemMessage(content=POLICY_AGENT_PROMPT)] + messages
 
@@ -223,19 +225,28 @@ def policy_agent_node(state: AgentState) -> AgentState:
         return {"messages": [response]}
 
 # ---------- 退货 Agent 节点 ----------
+MAX_RETURN_ITERATIONS = 4
+
 def return_agent_node(state: AgentState) -> AgentState:
     print("\n" + "=" * 60)
     print("【退货 Agent】执行中...")
-    messages = state["messages"]
+    messages = list(state["messages"])
     if not any(isinstance(m, SystemMessage) for m in messages):
         messages = [SystemMessage(content=RETURN_AGENT_PROMPT)] + messages
 
-    response = return_llm.invoke(messages)
+    # 内部 ReAct 循环：第一轮强制资格检查，之后根据 eligible 结果决定是否创建退货单
+    new_messages = []
+    for i in range(MAX_RETURN_ITERATIONS):
+        current_llm = return_first_llm if i == 0 else return_llm
+        response = current_llm.invoke(messages)
+        new_messages.append(response)
 
-    if response.content:
-        print(f"💭 退货 Agent 思考：{response.content}")
+        if response.content:
+            print(f"💭 退货 Agent 思考：{response.content}")
 
-    if response.tool_calls:
+        if not response.tool_calls:
+            break
+
         tool_messages = []
         for tool_call in response.tool_calls:
             tool_name = tool_call["name"]
@@ -253,15 +264,17 @@ def return_agent_node(state: AgentState) -> AgentState:
                 result = json.dumps({"error": f"工具执行失败：{str(e)}"}, ensure_ascii=False)
             print(f"👀 观察结果：{result}")
             tool_messages.append(ToolMessage(content=result, tool_call_id=tool_call_id, name=tool_name))
-        return {"messages": [response] + tool_messages}
-    else:
-        return {"messages": [response]}
+
+        new_messages.extend(tool_messages)
+        messages = messages + [response] + tool_messages
+
+    return {"messages": new_messages}
 
 # ---------- 最终回复节点 ----------
 def final_response_node(state: AgentState) -> AgentState:
     print("\n" + "=" * 60)
     print("【最终回复】生成中...")
-    messages = state["messages"]
+    messages = list(state["messages"])
     if not any(isinstance(m, SystemMessage) for m in messages):
         messages = [SystemMessage(content=FINAL_RESPONSE_PROMPT)] + messages
 
