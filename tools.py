@@ -1,15 +1,18 @@
 import json
 from datetime import datetime, timedelta
+from typing import Annotated
 from langchain_core.tools import tool
+from langgraph.prebuilt import InjectedState
 import database
 
 # ---------- 工具 1：查询订单 ----------
 @tool
-def search_order(order_id: str) -> str:
+def search_order(order_id: str, user_id: Annotated[str, InjectedState("user_id")]) -> str:
     """
     查询订单状态工具。
     输入：order_id，例如 ORD123456。
     输出：订单状态 JSON 字符串。
+    注意：user_id 由系统从图状态注入（InjectedState），模型不可见、不可伪造。
     """
 
     if not order_id or order_id.strip() == "":
@@ -17,32 +20,40 @@ def search_order(order_id: str) -> str:
     
     conn = database.get_connection()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM orders WHERE order_id = ?", (order_id.upper(),))
+    cur.execute(
+        "SELECT * FROM orders WHERE order_id = ? AND user_id = ?",
+        (order_id.upper(), user_id),
+    )
     order = cur.fetchone()
     conn.close()
 
     if order:
         return json.dumps(dict(order), ensure_ascii=False)
 
+    # 统一返回"订单不存在"（不区分无权访问），防止订单号枚举探测
     return json.dumps({"error": "订单不存在", "order_id": order_id}, ensure_ascii=False)
 
 # ---------- 工具 2：创建退货申请（含业务校验） ----------
 @tool
-def process_return(order_id: str, reason: str = "七天无理由") -> str:
+def process_return(order_id: str, reason: str = "七天无理由", user_id: Annotated[str, InjectedState("user_id")] = "") -> str:
     """
     创建退货申请工具。
     输入：order_id，可选 reason。
     输出：退货申请单 JSON 字符串。
     业务规则：
-    - 订单必须存在
+    - 订单必须存在且属于当前用户
     - 订单状态必须为“已签收”
     - 签收时间不超过 15 天（质量问题）或 7 天（无理由）
+    注意：user_id 由系统从图状态注入（InjectedState），模型不可见、不可伪造。
     """
     conn = database.get_connection()
     cur = conn.cursor()
 
-    # 查询订单
-    cur.execute("SELECT * FROM orders WHERE order_id = ?", (order_id.upper(),))
+    # 查询订单（强制按当前用户过滤）
+    cur.execute(
+        "SELECT * FROM orders WHERE order_id = ? AND user_id = ?",
+        (order_id.upper(), user_id),
+    )
     order = cur.fetchone()
     if not order:
         conn.close()
@@ -89,19 +100,23 @@ def process_return(order_id: str, reason: str = "七天无理由") -> str:
 
 # ---------- 工具 3：检查退货资格（真实业务校验） ----------
 @tool
-def check_return_eligibility(order_id: str, reason: str = "七天无理由") -> str:
+def check_return_eligibility(order_id: str, reason: str = "七天无理由", user_id: Annotated[str, InjectedState("user_id")] = "") -> str:
     """
     检查订单是否符合退货条件。
     输入：order_id，可选 reason。
     输出：JSON 字符串，包含 eligible 字段（true/false）和原因。
     规则：
-    - 订单必须存在且状态为已签收
+    - 订单必须存在、属于当前用户且状态为已签收
     - 无理由退货：签收后7天内
     - 质量问题退货：签收后15天内
+    注意：user_id 由系统从图状态注入（InjectedState），模型不可见、不可伪造。
     """
     conn = database.get_connection()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM orders WHERE order_id = ?", (order_id.upper(),))
+    cur.execute(
+        "SELECT * FROM orders WHERE order_id = ? AND user_id = ?",
+        (order_id.upper(), user_id),
+    )
     order = cur.fetchone()
     conn.close()
 

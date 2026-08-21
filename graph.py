@@ -115,6 +115,7 @@ class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
     next_agent: str
     supervisor_calls: int   # 新增：Supervisor 调度次数计数
+    user_id: str            # 新增：当前用户身份（由调用方注入，LLM 不可见、不可伪造）
 
 # ---------- Supervisor 节点 ----------
 def supervisor_node(state: AgentState) -> AgentState:
@@ -195,7 +196,8 @@ def order_agent_node(state: AgentState) -> AgentState:
             print(f"🔧 调用工具：{tool_name}，参数：{tool_args}")
             try:
                 if tool_name == "search_order":
-                    result = search_order.invoke(tool_args)
+                    # 注入当前用户身份：身份只来自图状态（登录注入），不由 LLM 提供
+                    result = search_order.invoke({**tool_args, "user_id": state.get("user_id", "")})
                 else:
                     result = json.dumps({"error": "未知工具"}, ensure_ascii=False)
             except Exception as e:
@@ -270,9 +272,10 @@ def return_agent_node(state: AgentState) -> AgentState:
             print(f"🔧 调用工具：{tool_name}，参数：{tool_args}")
             try:
                 if tool_name == "check_return_eligibility":
-                    result = check_return_eligibility.invoke(tool_args)
+                    # 注入当前用户身份：身份只来自图状态（登录注入），不由 LLM 提供
+                    result = check_return_eligibility.invoke({**tool_args, "user_id": state.get("user_id", "")})
                 elif tool_name == "process_return":
-                    result = process_return.invoke(tool_args)
+                    result = process_return.invoke({**tool_args, "user_id": state.get("user_id", "")})
                 else:
                     result = json.dumps({"error": "未知工具"}, ensure_ascii=False)
             except Exception as e:
@@ -349,7 +352,7 @@ if __name__ == "__main__":
     for query in test_queries:
         print("\n" + "#" * 70)
         print(f"用户输入：{query}")
-        initial_state = {"messages": [("user", query)]}
+        initial_state = {"messages": [("user", query)], "user_id": "user_001"}
         result = app.invoke(initial_state)
         final_msg = result["messages"][-1]
         print("\n🎯 最终回复：", final_msg.content)

@@ -12,6 +12,17 @@ st.set_page_config(page_title="智能客服", page_icon="🤖")
 st.title("🤖 多 Agent 智能客服系统")
 st.caption("基于 LangGraph + DeepSeek + Chroma 向量检索")
 
+# ---------- 模拟登录（演示认证层；生产环境替换为 SSO/OAuth） ----------
+with st.sidebar:
+    st.subheader("👤 当前用户")
+    user_id = st.selectbox(
+        "选择身份",
+        [f"user_{i:03d}" for i in range(1, 11)],
+        key="login_select",
+    )
+    st.session_state.user_id = user_id
+    st.caption("⚠️ 演示环境模拟认证，生产环境由 SSO 提供\n切换身份后仅影响后续查询")
+
 # ---------- 开发者工具：热更新 ----------
 with st.sidebar.expander("🛠️ 开发者工具", expanded=False):
     if st.button("🔄 重新加载代码并重建图"):
@@ -68,8 +79,11 @@ def run_graph_with_logs(langchain_messages):
     sys.stdout = buffer = io.StringIO()
 
     try:
-        initial_state = {"messages": langchain_messages}
-        result = st.session_state.graph.invoke(initial_state,config={"recursion_limit": 40})
+        initial_state = {
+            "messages": langchain_messages,
+            "user_id": st.session_state.get("user_id", "anonymous"),  # 身份由登录层注入
+        }
+        result = st.session_state.graph.invoke(initial_state, config={"recursion_limit": 40})
         final_answer = result["messages"][-1].content
     except Exception as e:
         final_answer = f"系统错误：{str(e)}"
